@@ -1,0 +1,68 @@
+作者QQ：3024026153
+邮箱：song1234588@163.com
+
+心知天气平台的官网：https://www.seniverse.com/
+首先需要注册登录
+初始状态会给你一个免费版的账号，能查询实时的天气和温湿度，可以购买开发者版，享受更多功能。
+注意！！！！！文章和代码中的API不一定好使，笔者会定期重置，由于重置api造成的不好使，不是笔者的问题！！！！！
+请求方法见文档：api指令.txt
+例如“https://api.seniverse.com/v3/weather/now.json?key=S-kAm0lDUxT-meOe_&location=anshan&language=zh-Hans&unit=c”
+是实时天气的请求。其中S-kAm0lDUxT-meOe_是API（已废弃），更换成你的api即可使用。
+请求结果如下：
+{
+  "results": [
+    {
+      "location": {
+        "id": "WXR3Y6P2CEQ3",
+        "name": "鞍山",
+        "country": "CN",
+        "path": "鞍山,鞍山,辽宁,中国",
+        "timezone": "Asia/Shanghai",
+        "timezone_offset": "+08:00"
+      },
+      "now": {
+        "text": "霾",
+        "code": "31",
+        "temperature": "1",
+        "feels_like": "-2",
+        "pressure": "1013",
+        "humidity": "61",
+        "visibility": "18.9",
+        "wind_direction": "北",
+        "wind_direction_degree": "10",
+        "wind_speed": "10.0",
+        "wind_scale": "2",
+        "clouds": "50",
+        "dew_point": ""
+      },
+      "last_update": "2025-12-10T10:26:40+08:00"
+    }
+  ]
+}
+通过json解析，即可读出数据。
+
+
+esp8266采用的是esp12f（不是esp01），使用的是查询法，定期使用http请求，通过读取解析json，返回天气数据
+
+
+esp32采用的是ESP-WROOM-32，使用双核轮流运行，非阻塞方式获取天气预报和时间。
+数据传出采用：   Serial.printf("%d%02d%02d%01d%02d %d %02d%02d %03d%02d %d %d %d %d%d/%02d/%02d-%02d:%02d \r\n",
+                  WiFi.status(), opentime, closetime, Blinker.connected(), cl, hours, day1.tianqitubiao, day1.shidu,
+                  day1.fengjiaodu, day1.dengji, day1.temperature, day1.pressure, slide, tens, ones,
+                  months, days, hours, minutes);
+串口输出：10816011 10 0045 12001 23 1088 12 25/12/10-10:39
+解析：10816011。其中分为：1   08  16  0  11     ，分别对wifi连接状态，定时1(选配)，定时2(选配)，点灯科技连接状态(选配)，控制指令(选配)。
+解析：10 0045 12001。其中分为：10   00    45    120    01   ，分别对应时间小时，天气代码（详见网站文档介绍），湿度，风向，等级。
+解析：23 1088 12   分别对应：温度（有符号整型），气压，滑动条（选配）。
+解析：25/12/10-10:39   网络授时，可以直接读取字符串即可。
+在串口输出侧直接鞋接收处理即可，下面的一个例子：
+			numc = strtoul((const char *)USART_RX_BUF, &lastttqsdfjddjwdptm, 10);
+			numt = strtoul(lastttqsdfjddjwdptm, &lasttqsdfjddjwdptm, 10);
+			numtqsd = strtoul(lasttqsdfjddjwdptm, &lastfjddjwdptm, 10);
+			numfjddj = strtoul(lastfjddjwdptm, &lastwdptm, 10);
+			numwd = strtoul(lastwdptm, &lastptm, 10);
+			nump = strtoul(lastptm, &addth, 10);
+			numth = strtoul(addth, &tm, 10);
+			strncpy(timeshou666, tm, sizeof(timeshou666) - 1);
+			timeshou666[sizeof(timeshou666) - 1] = '\0';
+ 

@@ -1,0 +1,354 @@
+#define BLINKER_WIFI
+#include <ArduinoJson.h>
+#include <Blinker.h>
+#include <TimeLib.h>
+#include <WiFi.h>
+#include <WiFiUDP.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define TEXTE_1 "tex-1"      // 窗帘开户状态
+#define TEXTE_2 "tex-2"      // 窗帘状态
+#define TEXTE_3 "tex-3"      // 报警状态
+#define TEXTE_4 "tex-4"      // 煤气值
+#define TEXTE_5 "tex-5"      // 室内温度
+#define TEXTE_6 "tex-6"      // 室内湿度
+#define TEXTE_7 "tex-7"      // 光照值
+#define Slider_1 "TempKey"//窗帘开启时间
+#define Slider_2 "TempK"//窗帘关闭时间
+
+String xdata;
+char *leftover;
+long number,number2;
+
+char auth[] = "123456789876";
+const char ssid[] = "TCL-578101";
+const char pass[] = "12345678";
+
+const char *host = "116.62.81.138";
+const uint16_t port = 80;
+
+String City = "tiexi";
+String My_Key = "SqckyEc0s9034nHrb";
+
+static const char ntpServerName[] = "time.nist.gov";
+const int timeZone = 8;
+int years, months, days, hours, minutes, seconds,weekdays, ones, tens;
+
+WiFiUDP Udp;
+unsigned int localPort = 8888;
+
+time_t getNtpTime();
+void sendNTPpacket(IPAddress& address);
+void oledClockDisplay();
+
+boolean isNTPConnected = false;
+
+typedef struct
+{
+    int temperature;
+    int pressure;
+    int shidu;
+    int tianqitubiao;
+    int fengjiaodu;
+    int dengji;
+
+} tianqixinxi;
+
+tianqixinxi day1;
+int OnTime = -1;
+bool DatFlag = true;
+unsigned long getTime = 0;
+String inputString = "";
+
+String url = "/v3/weather/now.json?key=" + My_Key + "&location=" + City + "&language=zh-Hans&unit=c";
+String urlDat = "key=" + My_Key + "&location=" + City + "&language=zh-Hans&unit=c";
+
+int led1 = 0;
+int led2 = 0;
+long int cl = 0;
+int opentime = 7;
+int closetime= 18;
+BlinkerButton Button1("btn-1");  //窗  
+BlinkerButton Button2("btn-2");  //窗帘
+BlinkerSlider Slider1(Slider_1);     
+BlinkerSlider Slider2(Slider_2);    
+BlinkerText Text1(TEXTE_1);        // 窗帘开户状态
+BlinkerText Text2(TEXTE_2);        // 窗帘状态
+BlinkerText Text3(TEXTE_3);        // 报警状态
+BlinkerText Text4(TEXTE_4);        // 煤气值
+BlinkerText Text5(TEXTE_5);        // 室内温度
+BlinkerText Text6(TEXTE_6);        // 室内湿度
+BlinkerText Text7(TEXTE_7);        // 光照值         
+BlinkerNumber edw("edw");
+void button1_callback(const String &state)
+{
+    led1++;
+    if (led1 > 1)
+        led1 = 0;
+    if (led1 == 1)
+        cl += 1;
+    else if (led1 == 0)
+        cl -= 1;
+}
+
+void button2_callback(const String &state)
+{
+    led2++;
+    if (led2 > 1)
+        led2 = 0;
+    if (led2 == 1)
+        cl += 10;
+    else if (led2 == 0)
+        cl -= 10;
+}
+
+void slider1_callback(int32_t val)
+{
+    opentime = val;
+}
+
+void slider2_callback(int32_t val2)
+{
+    closetime = val2;
+}
+
+void heartbeat()
+{
+    edw.print(number2);
+}
+void setup()
+{
+    Serial.begin(9600);
+    while (!Serial)
+        continue;
+    Blinker.delay(100);
+    pinMode(2, OUTPUT); // GPIO2
+    digitalWrite(2, LOW);
+    Blinker.delay(200);
+
+    digitalWrite(2, HIGH);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, pass);
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        Blinker.delay(500);
+    }
+    
+    Udp.begin(localPort);
+    setSyncProvider(getNtpTime);
+    setSyncInterval(60);
+    isNTPConnected = true;    
+    
+    Blinker.begin(auth, ssid, pass);
+    Button1.attach(button1_callback);
+    Button2.attach(button2_callback);
+    Slider1.attach(slider1_callback);
+    Slider2.attach(slider2_callback);
+    Blinker.attachHeartbeat(heartbeat);
+    GET_Weather();
+    DateHandle();
+}
+
+void loop()
+{
+    oledClockDisplay();
+    xdata = receive();
+    if (xdata != "")
+    {
+        char *ReceiveBuff = new char[xdata.length() + 1];
+        strcpy(ReceiveBuff, xdata.c_str());
+        number = strtoul(ReceiveBuff, &leftover, 10);
+        number2=atoi(leftover);
+        if (number % 10 == 1)
+        {
+            Text1.print("窗户已开启");
+        }
+        else
+            Text1.print("窗户已关闭");
+        if (number / 10 % 10 == 1)
+        {
+            Text2.print("窗帘已展开"); 
+        }
+        else
+            Text2.print("窗帘已收起");
+        delete[] ReceiveBuff;
+    }
+    if (getTime++ >= 5)
+    {
+        getTime = 0;
+        GET_Weather();
+    }
+    Serial.printf("%d%02d%02d%02d %d %02d%02d %03d%02d %d %d %d%d/%02d/%02d-%02d:%02d \r\n",WiFi.status(),opentime,closetime,cl,hours,day1.tianqitubiao,day1.shidu,day1.fengjiaodu, day1.dengji,day1.temperature, day1.pressure, tens, ones, months, days, hours, minutes);
+    digitalWrite(2,Blinker.connected());
+    Blinker.delay(500);
+    Blinker.run();
+}
+String receive()
+{
+    String data = "";
+    while (Serial.available())
+    {
+        char c = (char)Serial.read();
+        data += c;
+        delay(2);
+    }
+    return data;
+}
+
+void GET_Weather()
+{
+    inputString = "";  
+    
+    client.setTimeout(5000);
+    
+    if (!client.connect(host, port))
+    {
+        return;
+    }
+    
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                 "Host: " + host + "\r\n" +
+                 "Connection: close\r\n\r\n");
+    
+    unsigned long timeout = millis();
+    while (client.connected() && !client.available())
+    {
+        if (millis() - timeout > 2000) {
+            client.stop();
+            return;
+        }
+        yield();
+    }
+    
+    while (client.available()) {
+        inputString = client.readString();
+        yield();
+    }
+    
+    client.stop();
+    
+    if(inputString.length() > 0) {
+        DatFlag = true;
+        DateHandle();
+    }
+}
+
+void DateHandle()
+{
+    if (DatFlag)
+    {
+        DatFlag = false;
+        
+        int jsonBeginAt = inputString.indexOf("{");
+        if (jsonBeginAt != -1) {
+            int jsonEndAt = inputString.lastIndexOf("}");
+            if (jsonEndAt > jsonBeginAt) {
+                processMessage(inputString.substring(jsonBeginAt, jsonEndAt + 1));
+                inputString = "";
+            }
+        }
+    }
+}
+
+void processMessage(const String &jsonData)
+{
+    const size_t capacity = 2 * JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(3) + JSON_OBJECT_SIZE(1) + 
+                           JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(6) + 3 * JSON_OBJECT_SIZE(13) + 1024;
+    DynamicJsonDocument doc(capacity);
+    
+    DeserializationError error = deserializeJson(doc, jsonData, DeserializationOption::NestingLimit(10));
+    if (error) {
+        return;
+    }
+    
+    JsonObject results_0;
+    if (doc.containsKey("results") && doc["results"].size() > 0) {
+        results_0 = doc["results"][0];
+    } else {
+        return;
+    }
+    
+    JsonObject results_0_now;
+    if (results_0.containsKey("now")) {
+        results_0_now = results_0["now"];
+    } else {
+        return;
+    }
+    
+    const char *results_0_daily_0_code_day = results_0_now["code"];
+    const char *results_0_daily_0_temp = results_0_now["temperature"];
+    const char *results_0_daily_0_press = results_0_now["pressure"];
+    const char *results_0_daily_0_humidity = results_0_now["humidity"];
+    const char *results_0_daily_0_wind_direction_degree = results_0_now["wind_direction_degree"];
+    const char *results_0_daily_0_wind_scale = results_0_now["wind_scale"];
+
+    OnTime++;
+    OnTime %= 5;
+    
+    day1.tianqitubiao = results_0_daily_0_code_day ? atoi(results_0_daily_0_code_day) : 0;
+    day1.temperature = results_0_daily_0_temp ? atoi(results_0_daily_0_temp) : 0;
+    day1.pressure = results_0_daily_0_press ? atoi(results_0_daily_0_press) : 0;
+    day1.shidu = results_0_daily_0_humidity ? atoi(results_0_daily_0_humidity) : 0;
+    day1.fengjiaodu = results_0_daily_0_wind_direction_degree ? atoi(results_0_daily_0_wind_direction_degree) : 0;
+    day1.dengji = results_0_daily_0_wind_scale ? atoi(results_0_daily_0_wind_scale) : 0;
+}
+void oledClockDisplay()
+{
+  years = year();
+  months = month();
+  days = day();
+  hours = hour();
+  minutes = minute();
+  seconds = second();
+  weekdays = weekday();
+  tens = (years / 10) % 10;
+  ones = years % 10;
+}
+
+const int NTP_PACKET_SIZE = 48;
+byte packetBuffer[NTP_PACKET_SIZE];
+
+time_t getNtpTime()
+{
+  IPAddress ntpServerIP;
+
+  while (Udp.parsePacket() > 0);
+  WiFi.hostByName(ntpServerName, ntpServerIP);
+  sendNTPpacket(ntpServerIP);
+  uint32_t beginWait = millis();
+  while (millis() - beginWait < 1500)
+  {
+    int size = Udp.parsePacket();
+    if (size >= NTP_PACKET_SIZE)
+    {
+      isNTPConnected = true;
+      Udp.read(packetBuffer, NTP_PACKET_SIZE);
+      unsigned long secsSince1900;
+      secsSince1900 = (unsigned long)packetBuffer[40] << 24;
+      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+      secsSince1900 |= (unsigned long)packetBuffer[43];
+      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+    }
+  }
+  isNTPConnected = false;
+  return 0;
+}
+
+void sendNTPpacket(IPAddress& address)
+{
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  packetBuffer[0] = 0b11100011;
+  packetBuffer[1] = 0;
+  packetBuffer[2] = 6;
+  packetBuffer[3] = 0xEC;
+  packetBuffer[12] = 49;
+  packetBuffer[13] = 0x4E;
+  packetBuffer[14] = 49;
+  packetBuffer[15] = 52;
+  Udp.beginPacket(address, 123);
+  Udp.write(packetBuffer, NTP_PACKET_SIZE);
+  Udp.endPacket();
+}
