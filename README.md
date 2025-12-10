@@ -28,3 +28,5 @@ The ESP32 version uses a dual-core alternating non-blocking query method, elimin
 Since this is a competition entry, it may contain some other optional components, which I haven't bothered to remove. Please understand. It can also be used for graduation projects without issue.      
 Author's email: song1234588@163.com (main), hafeizhou999@gmail.com (not frequently online)     
 QQ: 3024026153     
+
+2025年12月10日
