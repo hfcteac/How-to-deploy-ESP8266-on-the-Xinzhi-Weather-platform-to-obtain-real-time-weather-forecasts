@@ -1,6 +1,8 @@
 作者QQ：3024026153
 邮箱：song1234588@163.com
 
+其中esp32是esp32的arduino代码，esp8266是esp8266的arduino代码，step是一个stm32hal库的代码。请注意，由于是曾经项目的文件，可能包含其他不需要的部分，请按需清除，关于api和密钥，请替换成自己的，否则可能会造成无法使用
+
 心知天气平台的官网：https://www.seniverse.com/
 首先需要注册登录
 初始状态会给你一个免费版的账号，能查询实时的天气和温湿度，可以购买开发者版，享受更多功能。
@@ -43,7 +45,23 @@
 
 
 esp8266采用的是esp12f（不是esp01），使用的是查询法，定期使用http请求，通过读取解析json，返回天气数据
-
+由于8266是单核mcu，在使用http访问时候会有卡顿，大概3s差不多，目前暂时没有优化的方法，后面想搞再说。
+数据传出同样使用串口printf：Serial.printf("%d%02d%02d%02d %d %02d%02d %03d%02d %d %d %d%d/%02d/%02d-%02d:%02d \r\n",
+WiFi.status(),opentime,closetime,cl,hours,day1.tianqitubiao,day1.shidu,day1.fengjiaodu, day1.dengji,day1.temperature, day1.pressure, tens, ones, months, days, hours, minutes);
+串口输出：1081611 10 0045 12001 23 1088 12 25/12/10-10:39
+解析：10816011。其中分为：1   08  16    11     ，分别对wifi连接状态，定时1(选配)，定时2(选配)，控制指令(选配)。
+解析：10 0045 12001。其中分为：10   00    45    120    01   ，分别对应时间小时，天气代码（详见网站文档介绍），湿度，风向，等级。
+解析：23 1088 12   分别对应：温度（有符号整型），气压，滑动条（选配）。
+解析：25/12/10-10:39   网络授时，可以直接读取字符串即可。
+在串口输出侧直接写接收处理即可，下面的一个例子：
+    HAL_GPIO_TogglePin(GPIOC ,GPIO_PIN_13);
+    numc = strtoul((const char*)ReceiveBuff,    &lastttqsdfjddjwdptm, 10);//控制
+    numt = strtoul(lastttqsdfjddjwdptm,    &lasttqsdfjddjwdptm, 10);//时间 
+    numtqsd = strtoul(lasttqsdfjddjwdptm, &lastfjddjwdptm, 10);//天气湿度    
+    numfjddj = strtoul(lastfjddjwdptm,&lastwdptm, 10); //风角度等级
+    numwd = strtoul(lastwdptm,   &lastptm, 10); //温度
+    nump = strtoul(lastptm,    &tm, 10); //风实际速度
+剩下的&tm就是时间。
 
 esp32采用的是ESP-WROOM-32，使用双核轮流运行，非阻塞方式获取天气预报和时间。
 数据传出采用：   Serial.printf("%d%02d%02d%01d%02d %d %02d%02d %03d%02d %d %d %d %d%d/%02d/%02d-%02d:%02d \r\n",
@@ -55,7 +73,7 @@ esp32采用的是ESP-WROOM-32，使用双核轮流运行，非阻塞方式获取
 解析：10 0045 12001。其中分为：10   00    45    120    01   ，分别对应时间小时，天气代码（详见网站文档介绍），湿度，风向，等级。
 解析：23 1088 12   分别对应：温度（有符号整型），气压，滑动条（选配）。
 解析：25/12/10-10:39   网络授时，可以直接读取字符串即可。
-在串口输出侧直接鞋接收处理即可，下面的一个例子：
+在串口输出侧直接写接收处理即可，下面的一个例子：
 			numc = strtoul((const char *)USART_RX_BUF, &lastttqsdfjddjwdptm, 10);
 			numt = strtoul(lastttqsdfjddjwdptm, &lasttqsdfjddjwdptm, 10);
 			numtqsd = strtoul(lasttqsdfjddjwdptm, &lastfjddjwdptm, 10);
@@ -65,4 +83,7 @@ esp32采用的是ESP-WROOM-32，使用双核轮流运行，非阻塞方式获取
 			numth = strtoul(addth, &tm, 10);
 			strncpy(timeshou666, tm, sizeof(timeshou666) - 1);
 			timeshou666[sizeof(timeshou666) - 1] = '\0';
- 
+&tm是时间字符串，需要复制确保安全显示。
+
+这样就可以把各种控制和指令全都解析出来。
+2025年12月12日14点18分
